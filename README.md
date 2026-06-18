@@ -113,7 +113,7 @@ This step has no script because it is done entirely through the **AWS IoT SiteWi
 
 Navigate to the [AWS IoT SiteWise console](https://console.aws.amazon.com/iotsitewise) in your browser. In the left navigation pane, choose **Edge → Edge gateways**. Any existing gateways are listed here.
 
-![Edge gateways list](sitewise_gateway/Screenshot_2026-06-19_at_12_28_24_AM.png)
+![Edge gateways list](sitewise_gateway/6.png)
 
 ---
 
@@ -152,7 +152,7 @@ Click **Create gateway**. The console will trigger a Greengrass deployment that 
 
 Watch the **Edge gateways** list — the gateway status should transition from *Deploying* → **Online / Healthy** within a few minutes. Once it's healthy you'll see the gateway detail page showing the linked Greengrass Core, edge architecture (MQTT-enabled, V3), and a **Publisher configuration status** of **In sync**.
 
-![Gateway detail — healthy and in sync](sitewise_gateway/6.png)
+![Gateway detail — healthy and in sync](sitewise_gateway/7.png)
 
 You can also confirm from the Core device itself:
 
@@ -184,11 +184,11 @@ The destination detail page shows the **Publisher settings** — publishing orde
 
 Click **Edit** on the destination, scroll down to **Path filters**, and replace `#` with your specific topic pattern.
 
-![Edit destination — Path filters with default `#`](sitewise_gateway/7.png)
+![Edit destination — Path filters with default `#`](sitewise_gateway/8.png)
 
 Click the pencil icon on the existing filter row to edit it inline and type your topic. In this setup the topic is `python/mqtt` (or use your production pattern such as `oa/us/dna/dttp/dttp/+/+/+`). Click the **✓ (Save path filter)** checkmark, then click **Save** to apply.
 
-![Edit destination — Path filter updated to specific topic](sitewise_gateway/8.png)
+![Edit destination — Path filter updated to specific topic](sitewise_gateway/9.png)
 
 Once saved, the destination view will confirm the updated filter is in place — the path filter column now shows `python/mqtt` instead of `#`.
 
