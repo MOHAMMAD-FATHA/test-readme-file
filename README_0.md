@@ -49,7 +49,7 @@ The device needs outbound internet access to reach:
 Installed automatically by **script 1** if missing: `openjdk-11-jdk`, `python3`, `python3-pip`, `curl`, `jq`, `zip`/`unzip`, AWS CLI, Docker.
 Required by **scripts 3 and 4** (install beforehand if not already present from script 1): `aws` CLI, `jq`, `openssl`.
 
-> **Note on script 1's commented-out `sudo-rs` block:** `01_Install_greengrass.sh` contains an *active* step that detects and swaps `sudo-rs` for classic `sudo` if present, and a **commented-out** block at the bottom of `04_provision_client_device.sh` that would reinstall `sudo-rs` and remove `sudo` again. This is unrelated to Greengrass functionality and modifies a core system utility — review this section with your security/ops team before ever uncommitting or relying on it.
+> ⚠️ **Note on script 1's commented-out `sudo-rs` block:** `01_Install_greengrass.sh` contains an *active* step that detects and swaps `sudo-rs` for classic `sudo` if present, and a **commented-out** block at the bottom of `04_provision_client_device.sh` that would reinstall `sudo-rs` and remove `sudo` again. This is unrelated to Greengrass functionality and modifies a core system utility — review this section with your security/ops team before ever uncommitting or relying on it.
 
 ---
 
@@ -111,15 +111,18 @@ This step has no script because it is done entirely through the **AWS IoT SiteWi
 
 **1. Open the AWS IoT SiteWise console**
 
-Navigate to the [AWS IoT SiteWise console](https://console.aws.amazon.com/iotsitewise) in your browser. In the left navigation pane, choose **Edge → Edge gateways**. Any existing gateways are listed here.
+Navigate to the [AWS IoT SiteWise console](https://console.aws.amazon.com/iotsitewise) in your browser.
 
-![Edge gateways list](sitewise_gateway/Screenshot_2026-06-19_at_12_28_24_AM.png)
+![SiteWise console home](sitewise_gateway/1.png)
 
 ---
 
-**2. Start creating a new gateway**
+**2. Go to Edge Gateways and start creation**
 
-Click the **Create gateway** button (top right of the gateways table).
+In the left navigation pane, choose **Edge gateways**, then click **Create gateway**.
+
+![Edge gateways list](sitewise_gateway/2.png)
+![Create gateway button](sitewise_gateway/3.png)
 
 ---
 
@@ -132,6 +135,8 @@ On the creation page, fill in the following:
 - **Gateway name** → enter a descriptive name, e.g. `mct-dev-sitewise-gateway`
 - **Greengrass device OS** → select the OS of your Core device (e.g. Linux)
 
+![Gateway configuration form](sitewise_gateway/4.png)
+
 ---
 
 **4. Select your existing Greengrass Core**
@@ -139,6 +144,8 @@ On the creation page, fill in the following:
 Expand the **Advanced configuration (optional)** section and click **Advanced setup**. From the **Greengrass core device** dropdown, select the Core device name you registered in Step 1.
 
 > If your device does not appear in the dropdown, verify it is online and that your IAM user has `greengrass:ListCoreDevices` permission.
+
+![Advanced setup — Core device selection](sitewise_gateway/5.png)
 
 ---
 
@@ -150,51 +157,18 @@ Click **Create gateway**. The console will trigger a Greengrass deployment that 
 
 **6. Verify the deployment**
 
-Watch the **Edge gateways** list — the gateway status should transition from *Deploying* → **Online / Healthy** within a few minutes. Once it's healthy you'll see the gateway detail page showing the linked Greengrass Core, edge architecture (MQTT-enabled, V3), and a **Publisher configuration status** of **In sync**.
-
-![Gateway detail — healthy and in sync](sitewise_gateway/6.png)
-
-You can also confirm from the Core device itself:
+- Watch the **Edge gateways** list in the SiteWise console — the gateway status should transition from *Deploying* → **Online / Healthy** within a few minutes.
+- You can also confirm from the Core device itself:
 
 ```bash
-# Check all running Greengrass components
+# Check the overall Greengrass deployment status
 sudo /greengrass/v2/bin/greengrass-cli component list
 
 # Tail the SiteWise publisher log for errors
 sudo tail -f /greengrass/v2/logs/aws.iot.SiteWiseEdgePublisher.log
 ```
 
----
-
-**7. Configure the SiteWise RealTime destination**
-
-After the gateway is healthy, a default destination named **SiteWise RealTime** is automatically created. Click on it from the gateway detail page under **Destinations** to review its settings.
-
-![Gateway detail — Destinations section with SiteWise RealTime](sitewise_gateway/Screenshot_2026-06-19_at_12_28_44_AM.png)
-
-The destination detail page shows the **Publisher settings** — publishing order, batch wait time, compression, and storage limits — and the **Path filters** list at the bottom, which controls which MQTT topics the gateway subscribes to and forwards to SiteWise.
-
-![SiteWise RealTime destination — Publisher settings and Path filters](sitewise_gateway/Screenshot_2026-06-19_at_12_28_56_AM.png)
-
----
-
-**8. Update the Path filter (important — change `#` to your specific topic)**
-
-> **The default path filter is `#`**, which is an MQTT wildcard matching every single topic on the local broker. This means all internal, system, and application messages would be forwarded to AWS IoT SiteWise — increasing ingestion costs, consuming unnecessary bandwidth, and polluting your SiteWise data streams. **Change this to your actual data topic before going to production.**
-
-Click **Edit** on the destination, scroll down to **Path filters**, and replace `#` with your specific topic pattern.
-
-![Edit destination — Path filters with default `#`](sitewise_gateway/7.png)
-
-Click the pencil icon on the existing filter row to edit it inline and type your topic. In this setup the topic is `python/mqtt` (or use your production pattern such as `oa/us/dna/dttp/dttp/+/+/+`). Click the **✓ (Save path filter)** checkmark, then click **Save** to apply.
-
-![Edit destination — Path filter updated to specific topic](sitewise_gateway/8.png)
-
-Once saved, the destination view will confirm the updated filter is in place — the path filter column now shows `python/mqtt` instead of `#`.
-
----
-
-Once the gateway shows as **Healthy** and the path filter is set, proceed to Step 3 (`03_deploy_components.sh`) to deploy the custom data-processing components.
+Once the gateway shows as **Healthy**, proceed to Step 3 (`03_deploy_components.sh`) to deploy the custom data-processing components.
 
 ---
 
