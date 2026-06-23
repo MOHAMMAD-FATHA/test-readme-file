@@ -145,7 +145,7 @@ cat <<EOF > "$RECIPE"
   "ComponentName": "${COMP_NAME}",
   "ComponentVersion": "${LIVE_VERSION}",
   "ComponentType": "aws.greengrass.generic",
-  "Manifests": [{ "Platform": { "os": "linux" }, "Lifecycle": { "Install": { "Script": "mkdir -p /greengrass/v2/oee_engine/data && chown -R ggc_user:ggc_group /greengrass/v2/oee_engine && chmod -R 775 /greengrass/v2/oee_engine/data ", "RequiresPrivilege": true }, "Run": "python3 -u {artifacts:path}/live_state_engine.py", "Setenv": { "CONFIG_PATH": "/greengrass/v2/oee_engine/config/station_config.json", "DB_PATH": "/greengrass/v2/oee_engine/data/stations_data.db", "SUB_TOPIC": "${SUB_TOPIC}" } }, "Artifacts": [{ "Uri": "${URI}", "Unarchive": "NONE", "Permission": { "Read": "OWNER", "Execute": "NONE" } }] }]
+  "Manifests": [{ "Platform": { "os": "linux" }, "Lifecycle": { "Install": { "Script": "mkdir -p /greengrass/v2/oee_engine/data && chown -R ggc_user:ggc_group /greengrass/v2/oee_engine && chmod -R 775 /greengrass/v2/oee_engine/data ", "RequiresPrivilege": true }, "Run": "python3 -u {artifacts:path}/live_state_engine.py", "Setenv": { "CONFIG_PATH": "/greengrass/v2/oee_engine/config/station_config.json", "DB_PATH": "/greengrass/v2/oee_engine/data/stations_data.db", "SUB_TOPIC": "${SUB_TOPIC}","SITEWISE_MODEL_NAME": "${SITEWISE_MODEL_NAME}" } }, "Artifacts": [{ "Uri": "${URI}", "Unarchive": "NONE", "Permission": { "Read": "OWNER", "Execute": "NONE" } }] }]
 }
 EOF
   CREATE_OUT=$(aws greengrassv2 create-component-version --inline-recipe fileb://"$RECIPE" --region "$REGION" 2>&1) || STATUS=$?
