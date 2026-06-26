@@ -460,11 +460,17 @@ def transform_payload(payload):
     station = payload.get("stationID"); tag = payload.get("tagName"); val = payload.get("details")
     shift = get_shift_for_station(station) if station else "A"
     out = val
-    try:
-        if not isinstance(val, (int,float)):
-            s = str(val)
-            out = float(s) if s.replace(".", "", 1).isdigit() else s
-    except: pass
+
+    if not isinstance(val, (int,float)):
+        try:
+            # Safely converts "3000.0" and "-267774" to floats
+            out = float(str(val).strip())
+            # s = str(val)
+            # out = float(s) if s.replace(".", "", 1).isdigit() else s
+        except (ValueError, TypeError):
+            # If it's pure text (like a PartNumber "ABC-123") or empty "", keep it as a string
+            pass
+           
     
     return {
         "topic": PUB_TOPIC,
@@ -495,6 +501,23 @@ def handle_message(payload):
     # Store incoming value internally
     sval = str(val).strip()
 
+
+    # Store incoming value internally
+    sval = str(val).strip()
+
+    # ==========================================
+    # --- ANTI-WIPE FIREWALL (PartNumber) ---
+    # ==========================================
+    if tag == "PartNumber" and sval == "":
+        # Check the memory cache to see if a job is currently active
+        job_active = str(last_tag_values.get(station, {}).get("B_JobInProgressForIgnition", "false")).lower() in ("true", "1", "yes", "y")
+        
+        if job_active:
+            safe_print(f"[ANTI-WIPE] {station} | Blocked empty 'PartNumber' because Job is Active.")
+            return # Drops the payload entirely so it never goes to SiteWise
+    # ==========================================
+
+
     # --- THE FIX: Ignore blank downtime reasons so they don't wipe memory ---
     # if tag == "S_DowntimeReasonOperator" and not sval:
     #     pass # Skip saving the blank string to internal memory
@@ -523,14 +546,6 @@ def handle_message(payload):
         publish_press_status(station, publish_tag)
 
 
-
-    # # NEW: Handle Downtime Reason Crash Recovery
-    # if tag == "S_DowntimeReasonOperator":
-    #     reason_str = str(val).strip()
-    #     # last_tag_values.setdefault(station, {})[tag] = reason_str
-    #     if reason_str:
-    #         save_runtime_state(station, 'last_known_reason', 'S_DowntimeReasonOperator', reason_str)
-    #         # We still want it to continue down and be forwarded to SiteWise via transform_payload
 
     if tag == "S_DowntimeReasonOperator":
         reason_str = str(val).strip()
@@ -565,6 +580,25 @@ def handle_message(payload):
 
     # Handle Machine State Evaluation
     if tag in MACHINE_STATE_TAGS:
+
+        # ==========================================
+        # --- 2. TEARDOWN SAFETY NET (Edge Case) ---
+        # ==========================================
+        if tag == "B_JobInProgressForIgnition":
+            is_job_running = str(val).lower() in ("true", "1", "yes", "y")
+            
+            # If the job just ended, automatically force the PartNumber to clear on AWS
+            if not is_job_running:
+                last_tag_values.setdefault(station, {})["PartNumber"] = ""
+                
+                clear_payload = json.dumps({
+                    "propertyAlias": f"{SITEWISE_MODEL_NAME}/{station}/PartNumber",
+                    "propertyValues":[{"timestamp":{"timeInSeconds":int(time.time())},"quality":"GOOD","value":{"stringValue": json.dumps({"PartNumber": "", "Shift": get_shift_for_station(station)})}}]
+                })
+                enqueue_publish(PUB_TOPIC, clear_payload)
+                safe_print(f"[TEARDOWN] {station} | Job ended. Forced PartNumber to empty string on AWS.")
+        # ==========================================
+        
         new_state = determine_machine_state(station, include_planned=False)
         publish_machine_state(station, new_state, by='main')
 

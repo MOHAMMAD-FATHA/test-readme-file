@@ -56,13 +56,13 @@ BROKER         = "127.0.0.1"
 PORT           = 1883
 SUB_TOPIC      = os.getenv("SUB_TOPIC",      "#")
 CSV_LOG_DIR    = os.getenv("CSV_LOG_DIR",    "/greengrass/v2/oee_engine/logs")
-LOG_QUEUE_SIZE = int(os.getenv("LOG_QUEUE_SIZE", "10000"))
+LOG_QUEUE_SIZE = int(os.getenv("LOG_QUEUE_SIZE", "50000")) # Increase from 10000 to 50000
 RETAIN_DAYS    = int(os.getenv("RETAIN_DAYS",    "7"))
 CLIENT_ID      = f"csv-logger-{random.randint(0, 99999)}"
 
-# Flush tuning — flush to disk every N rows OR every T seconds, whichever first
-FLUSH_EVERY_N_ROWS  = 50
-FLUSH_INTERVAL_SECS = 5.0
+# Flush tuning — flush to disk every N rows OR every T seconds
+FLUSH_EVERY_N_ROWS  = 5000  # Increased from 50 to 5000
+FLUSH_INTERVAL_SECS = 10.0  # Increased from 5.0 to 10.0
 
 # ---------------------------------------------------------------------------
 # Timezone — matches live_state_engine.py
@@ -106,48 +106,155 @@ def on_disconnect(client, userdata, rc):
     mqtt_connected = False
     safe_print(f"[MQTT] Disconnected (rc={rc}). Auto-reconnect active.")
 
+# def on_message(client, userdata, msg):
+#     """
+#     Runs on the MQTT network thread.
+#     MUST stay non-blocking — only decode minimum fields and drop into queue.
+#     Any slow operation here will lag or drop the MQTT connection.
+#     """
+
+#     try:
+#         raw = msg.payload.decode("utf-8", errors="replace")
+#         ts  = now_central().strftime("%Y-%m-%d %H:%M:%S")
+
+#         try:
+#             payload = json.loads(raw)
+#         except json.JSONDecodeError:
+#             payload = {}
+
+#         # Extract fields matching live_state_engine payload shape
+#         station_id = payload.get("stationID", "")
+#         tag_name   = payload.get("tagName",   "")
+#         value      = payload.get("details",   "")
+
+#         # No RawPayload column — redundant data, was causing 3x file size
+#         row = (ts, station_id, tag_name, str(value))
+
+#         try:
+#             csv_log_queue.put_nowait(row)
+#         except Full:
+#             safe_print("[CSV WARNING] Queue Full! Dropping MQTT message.")
+
+#     except Exception:
+#         pass  # Never let a bad payload crash the MQTT thread
+
 def on_message(client, userdata, msg):
     """
     Runs on the MQTT network thread.
-    MUST stay non-blocking — only decode minimum fields and drop into queue.
-    Any slow operation here will lag or drop the MQTT connection.
+    Ultra-lightweight to ensure we never block incoming high-frequency packets.
     """
     try:
+        # 1. Decode raw bytes to string instantly
         raw = msg.payload.decode("utf-8", errors="replace")
-        ts  = now_central().strftime("%Y-%m-%d %H:%M:%S")
-
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            payload = {}
-
-        # Extract fields matching live_state_engine payload shape
-        station_id = payload.get("stationID", "")
-        tag_name   = payload.get("tagName",   "")
-        value      = payload.get("details",   "")
-
-        # No RawPayload column — redundant data, was causing 3x file size
-        row = (ts, station_id, tag_name, str(value))
-
-        try:
-            csv_log_queue.put_nowait(row)
-        except Full:
-            pass  # Drop silently — never block the network thread
-
+        
+        # 2. Push directly to the queue. Parsing is handled by the worker thread.
+        csv_log_queue.put_nowait(raw)
+        
+    except Full:
+        # Warns you in Greengrass logs if Python is actually falling behind
+        safe_print("[CSV WARNING] Queue Full! Dropping MQTT message. : ",raw)
     except Exception:
-        pass  # Never let a bad payload crash the MQTT thread
+        safe_print("[CSV WARNING] bad payload. : ",raw)  # Prevent any bad packet from crashing the network thread
 
 # ---------------------------------------------------------------------------
 # Thread 1: CSV Logger Worker  (all disk I/O lives here)
 # ---------------------------------------------------------------------------
+# def csv_logger_worker():
+#     """
+#     Pulls rows from the in-memory queue and writes them to today's CSV file.
+
+#     - Keeps file handle open all day (no open/close overhead per message)
+#     - Rotates to a new file at midnight CST automatically
+#     - csv.writer safely escapes commas, quotes, newlines inside values
+#     - Flushes every FLUSH_EVERY_N_ROWS rows OR every FLUSH_INTERVAL_SECS seconds
+#     """
+#     safe_print("[CSV LOGGER] Worker thread started.")
+
+#     current_date: str | None = None
+#     file_handle              = None
+#     writer                   = None
+#     rows_since_flush         = 0
+#     last_flush_time          = time.monotonic()
+
+#     os.makedirs(CSV_LOG_DIR, exist_ok=True)
+
+#     def open_todays_file(today_str: str):
+#         path         = os.path.join(CSV_LOG_DIR, f"raw_mqtt_{today_str}.csv")
+#         needs_header = not os.path.exists(path)
+#         fh           = open(path, "a", newline="", encoding="utf-8")
+#         w            = csv.writer(fh)
+#         if needs_header:
+#             w.writerow(["Timestamp_CST", "StationID", "TagName", "Value"])
+#             fh.flush()
+#         safe_print(f"[CSV LOGGER] Opened -> {path}")
+#         return fh, w
+
+#     while not shutdown_event.is_set():
+
+#         # Block up to 2 s waiting for a row — allows timers to tick even at low rates
+#         try:
+#             row = csv_log_queue.get(timeout=2.0)
+#         except Empty:
+#             # No new data — check if a time-based flush is due
+#             if file_handle and (time.monotonic() - last_flush_time) >= FLUSH_INTERVAL_SECS:
+#                 # file_handle.flush()
+#                 # last_flush_time = time.monotonic()
+#                 try:
+#                     file_handle.flush()
+#                     last_flush_time = time.monotonic()
+#                 except Exception as e:
+#                     safe_print(f"[CSV LOGGER ERROR] Time-based flush failed: {e}")
+#             continue
+
+#         today_str = now_central().strftime("%Y-%m-%d")
+
+#         # ── Daily file rotation at midnight CST ──────────────────────────
+#         if today_str != current_date:
+#             if file_handle:
+#                 # file_handle.flush()
+#                 try:
+#                     file_handle.flush()
+#                 except Exception as e:
+#                     safe_print(f"[CSV LOGGER ERROR] Flush before close failed: {e}")
+#                 file_handle.close()
+#                 safe_print("[CSV LOGGER] Midnight rotation — closed yesterday's file.")
+
+#             file_handle, writer = open_todays_file(today_str)
+#             current_date        = today_str
+#             rows_since_flush    = 0
+#             last_flush_time     = time.monotonic()
+
+#         # ── Write row ────────────────────────────────────────────────────
+#         try:
+#             writer.writerow(row)
+#             rows_since_flush += 1
+#         except Exception as e:
+#             safe_print(f"[CSV LOGGER ERROR] Write failed: {e}")
+#             continue
+
+#         # ── Flush every N rows OR every T seconds ─────────────────────────
+#         now = time.monotonic()
+#         if rows_since_flush >= FLUSH_EVERY_N_ROWS or (now - last_flush_time) >= FLUSH_INTERVAL_SECS:
+#             # file_handle.flush()
+#             # rows_since_flush = 0
+#             # last_flush_time  = now
+#             try:
+#                 file_handle.flush()
+#                 rows_since_flush = 0
+#                 last_flush_time  = now
+#             except Exception as e:
+#                 safe_print(f"[CSV LOGGER ERROR] Row-based flush failed: {e}")
+
+#     # ── Clean shutdown ────────────────────────────────────────────────────
+#     if file_handle:
+#         file_handle.flush()
+#         file_handle.close()
+#         safe_print("[CSV LOGGER] File closed cleanly on shutdown.")
+
 def csv_logger_worker():
     """
-    Pulls rows from the in-memory queue and writes them to today's CSV file.
-
-    - Keeps file handle open all day (no open/close overhead per message)
-    - Rotates to a new file at midnight CST automatically
-    - csv.writer safely escapes commas, quotes, newlines inside values
-    - Flushes every FLUSH_EVERY_N_ROWS rows OR every FLUSH_INTERVAL_SECS seconds
+    Pulls raw strings from the queue, parses JSON, and logs to a daily CSV file.
+    Flushes less aggressively to minimize disk I/O bottlenecks.
     """
     safe_print("[CSV LOGGER] Worker thread started.")
 
@@ -172,14 +279,12 @@ def csv_logger_worker():
 
     while not shutdown_event.is_set():
 
-        # Block up to 2 s waiting for a row — allows timers to tick even at low rates
         try:
-            row = csv_log_queue.get(timeout=2.0)
+            # Block up to 2 seconds waiting for raw message string
+            raw_string = csv_log_queue.get(timeout=2.0)
         except Empty:
             # No new data — check if a time-based flush is due
             if file_handle and (time.monotonic() - last_flush_time) >= FLUSH_INTERVAL_SECS:
-                # file_handle.flush()
-                # last_flush_time = time.monotonic()
                 try:
                     file_handle.flush()
                     last_flush_time = time.monotonic()
@@ -187,12 +292,22 @@ def csv_logger_worker():
                     safe_print(f"[CSV LOGGER ERROR] Time-based flush failed: {e}")
             continue
 
+        # ── Parse JSON on this worker thread (Moved out of MQTT thread) ──
+        ts = now_central().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            payload = json.loads(raw_string)
+            station_id = payload.get("stationID", "")
+            tag_name   = payload.get("tagName", "")
+            value      = payload.get("details", "")
+            row = (ts, station_id, tag_name, str(value))
+        except Exception:
+            continue  # Skip corrupt JSON payloads silently
+
         today_str = now_central().strftime("%Y-%m-%d")
 
         # ── Daily file rotation at midnight CST ──────────────────────────
         if today_str != current_date:
             if file_handle:
-                # file_handle.flush()
                 try:
                     file_handle.flush()
                 except Exception as e:
@@ -213,12 +328,9 @@ def csv_logger_worker():
             safe_print(f"[CSV LOGGER ERROR] Write failed: {e}")
             continue
 
-        # ── Flush every N rows OR every T seconds ─────────────────────────
+        # ── Safe, efficient flushing to protect disk performance ─────────
         now = time.monotonic()
         if rows_since_flush >= FLUSH_EVERY_N_ROWS or (now - last_flush_time) >= FLUSH_INTERVAL_SECS:
-            # file_handle.flush()
-            # rows_since_flush = 0
-            # last_flush_time  = now
             try:
                 file_handle.flush()
                 rows_since_flush = 0
