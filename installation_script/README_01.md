@@ -49,7 +49,7 @@ The device needs outbound internet access to reach:
 Installed automatically by **script 1** if missing: `openjdk-11-jdk`, `python3`, `python3-pip`, `curl`, `jq`, `zip`/`unzip`, AWS CLI, Docker.
 Required by **scripts 3 and 4** (install beforehand if not already present from script 1): `aws` CLI, `jq`, `openssl`.
 
-> ⚠️ **Note on script 1's commented-out `sudo-rs` block:** `01_Install_greengrass.sh` contains an *active* step that detects and swaps `sudo-rs` for classic `sudo` if present, and a **commented-out** block at the bottom of `04_provision_client_device.sh` that would reinstall `sudo-rs` and remove `sudo` again. This is unrelated to Greengrass functionality and modifies a core system utility — review this section with your security/ops team before ever uncommitting or relying on it.
+> **Note on script 1's commented-out `sudo-rs` block:** `01_Install_greengrass.sh` contains an *active* step that detects and swaps `sudo-rs` for classic `sudo` if present, and a **commented-out** block at the bottom of `04_provision_client_device.sh` that would reinstall `sudo-rs` and remove `sudo` again. This is unrelated to Greengrass functionality and modifies a core system utility — review this section with your security/ops team before ever uncommitting or relying on it.
 
 ---
 
@@ -210,31 +210,17 @@ On the destination page, you can see **Publisher settings** (publishing order, b
 
 In Edit mode, scroll down to **Path filters**. The default filter value is **`#`** (highlighted in red below).
 
-> ⚠️ **`#` is an MQTT wildcard that matches every topic on the broker.** Leaving it as `#` means all internal Greengrass system topics, heartbeats, and any other application traffic get forwarded to SiteWise — driving up ingestion costs and polluting your data streams. **Always change this to your actual data topic before going to production.**
+> **`#` is an MQTT wildcard that matches every topic on the broker.** Leaving it as `#` means all internal Greengrass system topics, heartbeats, and any other application traffic get forwarded to SiteWise — driving up ingestion costs and polluting your data streams. **Always change this to your actual data topic before going to production.**
 
 ![Edit destination — default path filter is `#`](sitewise_gateway/9.png)
 
 ---
 
-**10. Review Publisher settings, then replace `#` with your specific topic**
+**10. Replace `#` with your specific topic**
 
-While in Edit mode, scroll up to review the full **Publisher settings** section (highlighted in red below). This controls how the gateway buffers and uploads data:
+Click the pencil icon next to the `#` entry to edit it inline. Type your actual MQTT topic — in this setup it is `python/mqtt` (for production use your real pattern such as `oa/us/dna/dttp/dttp/+/+/+`). Then click the blue **✓ checkmark** labelled **Save path filter** (highlighted in red) to confirm the inline edit, then click the orange **Save** button at the bottom-right to save the destination.
 
-- **Publishing order** → Publish oldest data first (default)
-- **Maximum batch wait time** → 10 seconds
-- **Activate compression when uploading data** → enabled, reduces bandwidth at the cost of CPU
-- **Exclude expired data / Cutoff period** → 7 days — data older than this isn't published
-- **Local storage settings → Retention period** → 7 days — local data older than this is deleted
-- **Rotation period** → 6 hours — how often expired data is batched into a single export file
-- **Storage capacity** → 2 GB — local storage cap before the oldest data is purged
-
-These defaults are reasonable for most setups, but review them against your own bandwidth, storage, and data-freshness requirements before saving.
-
-![Edit destination — Publisher settings (publishing order, batch wait, compression, cutoff, retention, rotation, storage)](sitewise_gateway/10-01.png)
-
-Next, scroll down to the **Path filters** section (highlighted in red below). Click the pencil ✏️ icon next to the `#` entry to edit it inline. Type your actual MQTT topic — in this setup it is `python/mqtt` (for production use your real pattern such as `oa/us/dna/dttp/dttp/+/+/+`). Click the blue **✓ checkmark** to confirm the inline edit, then click the orange **Save** button at the bottom-right to save the destination.
-
-![Edit destination — path filter updated to `python/mqtt`, click ✓ to save](sitewise_gateway/10-02.png)
+![Edit destination — path filter updated to `python/mqtt`, click ✓ to save](sitewise_gateway/10.png)
 
 ---
 
