@@ -206,7 +206,17 @@ On the destination page, you can see **Publisher settings** (publishing order, b
 
 ---
 
-**9. Review Publisher settings, then replace the default `#` path filter with your specific topic**
+**9. Locate the default path filter `#`**
+
+In Edit mode, scroll down to **Path filters**. The default filter value is **`#`** (highlighted in red below).
+
+> ⚠️ **`#` is an MQTT wildcard that matches every topic on the broker.** Leaving it as `#` means all internal Greengrass system topics, heartbeats, and any other application traffic get forwarded to SiteWise — driving up ingestion costs and polluting your data streams. **Always change this to your actual data topic before going to production.**
+
+![Edit destination — default path filter is `#`](sitewise_gateway/9.png)
+
+---
+
+**10. Review Publisher settings, then replace `#` with your specific topic**
 
 While in Edit mode, scroll up to review the full **Publisher settings** section (highlighted in red below). This controls how the gateway buffers and uploads data:
 
@@ -222,17 +232,13 @@ These defaults are reasonable for most setups, but review them against your own 
 
 ![Edit destination — Publisher settings (publishing order, batch wait, compression, cutoff, retention, rotation, storage)](sitewise_gateway/10-01.png)
 
-Next, scroll down to the **Path filters** section. The default filter value is **`#`** (highlighted in red below).
-
-> ⚠️ **`#` is an MQTT wildcard that matches every topic on the broker.** Leaving it as `#` means all internal Greengrass system topics, heartbeats, and any other application traffic get forwarded to SiteWise — driving up ingestion costs and polluting your data streams. **Always change this to your actual data topic before going to production.**
-
-Click the pencil ✏️ icon next to the `#` entry to edit it inline. Type your actual MQTT topic — in this setup it is `python/mqtt` (for production use your real pattern such as `oa/us/dna/dttp/dttp/+/+/+`). Click the blue **✓ checkmark** to confirm the inline edit, then click the orange **Save** button at the bottom-right to save the destination.
+Next, scroll down to the **Path filters** section (highlighted in red below). Click the pencil ✏️ icon next to the `#` entry to edit it inline. Type your actual MQTT topic — in this setup it is `python/mqtt` (for production use your real pattern such as `oa/us/dna/dttp/dttp/+/+/+`). Click the blue **✓ checkmark** to confirm the inline edit, then click the orange **Save** button at the bottom-right to save the destination.
 
 ![Edit destination — path filter updated to `python/mqtt`, click ✓ to save](sitewise_gateway/10-02.png)
 
 ---
 
-**10. Confirm the updated path filter**
+**11. Confirm the updated path filter**
 
 Back on the SiteWise RealTime destination view, the **Path filters** section (highlighted in red) now shows `python/mqtt` instead of `#`. The update is complete.
 
